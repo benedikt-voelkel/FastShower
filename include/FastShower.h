@@ -1,6 +1,8 @@
-#include <stdlib.h>     /* srand, rand */
-#include <time.h>       /* time */
+#include <random>
 #include <vector>
+#include <functional>
+
+#include <iostream>
 
 #include "VMCFastSim/FastSim.h"
 
@@ -8,43 +10,28 @@
 class FastShower : public vmcfastsim::base::FastSim<FastShower>
 {
   public:
-    FastShower(const std::vector<double>& edges, double particleMass) : FastSim(vmcfastsim::base::EKernelMode::kSTEPS)
+    FastShower(double mean, double sigma, std::function<void(double)> f)
+      : FastSim(vmcfastsim::base::EKernelMode::kHITS, "FastShower"), mDistribution(mean, sigma), mStoreHit(f)
     {
-      mBinEdges.clear();
-      mBinEdges.resize(edges.size(), 0.);
-      for(int i = 0; i < edges.size(); i++) {
-        mBinEdges[i] = edges[i];
-      }
-      // Set seeds
-      srand(time(NULL));
     }
     virtual ~FastShower() = default;
 
     virtual bool Process() override final
     {
-      // Get random double between 0. and 1.
-      double d = static_cast<double>(rand()) / RAND_MAX;
-      int nParticles;
-      // Find the upper edge off the bin whose number will correspond to the number of particles to be created
-      for(nParticles = 0; nParticles < mBinEdges.size(); nParticles++) {
-        if(d <= mBinEdges[nParticles]) {
-          break;
-        }
+      if(GetCurrentParticle()->GetPdgCode() == 2212) {
+        std::cerr << "Role the dice" << std::endl;
+        mStoreHit(mDistribution(mGenerator));
       }
-      // Push binNumber electrons
-      //for(int i = 0; i < nParticles; i++) {
-      //  PushTrack(1, fCurrentParticleStatus->fParentId, 11, 1., 1., 1., 1., 0., 0., 0., 1., 1., 0., 0., TMCProcess, 1., 1);
-      //}
       return true;
     }
     virtual void Stop() override final
     {
-      // Do nothing for now
+      // Nothing to be done yet
     }
 
   private:
     /// The bin edges
-    std::vector<double> mBinEdges;
-    /// Particle mass
-    double mParticleMass;
+    std::default_random_engine mGenerator;
+    std::normal_distribution<double> mDistribution;
+    std::function<void(double)> mStoreHit;
 };

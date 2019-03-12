@@ -479,10 +479,16 @@ void FastShowerDetectorConstruction::SetCuts()
 
   mediumId = fMC->MediumId("Galactic");
   if ( mediumId ) {
+    /*
     fMC->Gstpar(mediumId, "CUTGAM", 990.e-09);
     fMC->Gstpar(mediumId, "BCUTE",  990.e-09);
     fMC->Gstpar(mediumId, "CUTELE", 990.e-09);
     fMC->Gstpar(mediumId, "DCUTE",  990.e-09);
+    */
+    fMC->Gstpar(mediumId, "CUTGAM", 100.);
+    fMC->Gstpar(mediumId, "BCUTE",  100.);
+    fMC->Gstpar(mediumId, "CUTELE", 100.);
+    fMC->Gstpar(mediumId, "DCUTE",  100.);
   }
 
   mediumId = fMC->MediumId("Beam");

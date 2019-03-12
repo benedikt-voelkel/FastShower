@@ -56,6 +56,7 @@ class FastShowerPrimaryGenerator : public TObject
     void  SetIsRandom(Bool_t isRandomGenerator);
     void  SetPrimaryType(Type primaryType);
     void  SetNofPrimaries(Int_t nofPrimaries);
+    void  SetPrimaryParticleEnergy(Double_t e);
 
     // get methods
     Bool_t GetUserDecay() const;
@@ -73,6 +74,7 @@ class FastShowerPrimaryGenerator : public TObject
     Bool_t            fIsRandom;      ///< Switch to random generator
     Type              fPrimaryType;   ///< Primary generator selection
     Int_t             fNofPrimaries;  ///< Number of primary particles
+    Double_t          fPrimaryParticleEnergy; ///< Energy of primaries
 
   ClassDef(FastShowerPrimaryGenerator,1)  //FastShowerPrimaryGenerator
 };
@@ -94,6 +96,9 @@ inline void  FastShowerPrimaryGenerator::SetPrimaryType(
 /// \param nofPrimaries The number of particles to be generated
 inline void  FastShowerPrimaryGenerator::SetNofPrimaries(Int_t nofPrimaries)
 { fNofPrimaries = nofPrimaries; }
+
+inline void  FastShowerPrimaryGenerator::SetPrimaryParticleEnergy(Double_t e)
+{ fPrimaryParticleEnergy = e; }
 
 /// Return true if particle with user decay is activated
 inline Bool_t FastShowerPrimaryGenerator::GetUserDecay() const

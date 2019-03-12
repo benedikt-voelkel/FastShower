@@ -5,12 +5,17 @@
 
 #include <TFile.h>
 #include <TH1D.h>
+#include <TF1.h>
 #include <TGeoManager.h>
 
 #include "FastShowerMCApplication.h"
 #include "FastShowerPrimaryGenerator.h"
 
 #include "FastShower.h"
+
+
+#include "TGeant3TGeo.h"
+
 
 #include "TG4RunConfiguration.h"
 #include "TGeant4.h"
@@ -60,10 +65,11 @@ int run(const bpo::variables_map& vm, std::string& errorMessage)
 
   FastShowerMCApplication* appl;
   TGeant4* geant4;
+  TGeant3TGeo* geant3;
   FastShower* fastShower;
   // RunConfiguration for Geant4
   TG4RunConfiguration* runConfiguration  = new TG4RunConfiguration("geomRoot", "FTFP_BERT",
-                                                                   "specialCuts+specialControls");
+                                                                   "stepLimiter+specialCuts+specialControls");
 
   if(vm.count("fast") && !vm.count("in")) {
     errorMessage += "If \"fast\" option is specified an input file is required.\n";
@@ -74,22 +80,33 @@ int run(const bpo::variables_map& vm, std::string& errorMessage)
   char** argv = {};
   int argc = 0;
 
-  if(!vm.count("fast")) { // That's just a G4 run
+  if(vm["mode"].as<std::string>().compare("single") == 0) { // That's just a G4 run
     appl = new FastShowerMCApplication("ExampleFastShower",  "The exampleFastShower MC application");
     // TGeant4 is needed in any case
     geant4 = new TGeant4("TGeant4", "The Geant4 Monte Carlo", runConfiguration, argc, argv);
-  } else { // That's with fast sim
+    geant4->ProcessGeantCommand("/mcTracking/skipNeutrino true");
+  } else if(vm["mode"].as<std::string>().compare("mixed-full") == 0) { // That's with fast sim
     appl = new FastShowerMCApplication("ExampleFastShower",  "The exampleFastShower MC application", kTRUE, kTRUE);
     // TGeant4 is needed in any case
     geant4 = new TGeant4("TGeant4", "The Geant4 Monte Carlo", runConfiguration, argc, argv);
+    geant4->ProcessGeantCommand("/mcTracking/skipNeutrino true");
+    geant3 = new TGeant3TGeo("TGeant3TGeo");
+  } else if(vm["mode"].as<std::string>().compare("mixed-fast") == 0) {
+    appl = new FastShowerMCApplication("ExampleFastShower",  "The exampleFastShower MC application", kTRUE, kTRUE, kTRUE);
+    // TGeant4 is needed in any case
+    geant4 = new TGeant4("TGeant4", "The Geant4 Monte Carlo", runConfiguration, argc, argv);
+    geant4->ProcessGeantCommand("/mcTracking/skipNeutrino true");
     // Take first cmd arg as path to ROOT file
     TFile file(vm["in"].as<std::string>().c_str(), "READ");
     // Extract the histogram
-    TH1D* histNElectrons = dynamic_cast<TH1D*>(file.Get(histNElectronsName.c_str()));
-    std::vector<double> binEdges;
-    convertToBinEdges(binEdges, histNElectrons);
+    TF1* fit = dynamic_cast<TF1*>(file.Get("energyDepositFit"));
+    Double_t parameters[3];
+    fit->GetParameters(&parameters[0]);
+    //TH1D* histNElectrons = dynamic_cast<TH1D*>(file.Get(histNElectronsName.c_str()));
+    //std::vector<double> binEdges;
+    //convertToBinEdges(binEdges, histNElectrons);
+    fastShower = new FastShower(parameters[1], parameters[2], [appl](double hitSum){ appl->GetCalorimeterSD()->SetTotalEdepGap(hitSum);});
     file.Close();
-    fastShower = new FastShower(binEdges, 0.51099906*1e-03);
     //appl->SetTransferTrack()
   }
 
@@ -99,8 +116,10 @@ int run(const bpo::variables_map& vm, std::string& errorMessage)
 
 
   // Run example
-  appl->InitMC("");
+  appl->InitMC();
 
+
+  appl->GetPrimaryGenerator()->SetPrimaryParticleEnergy(vm["particle-energy"].as<double>());
   appl->GetPrimaryGenerator()->SetNofPrimaries(vm["part-per-event"].as<int>());
 
   appl->RunMC(vm["nevents"].as<int>());
@@ -118,12 +137,14 @@ void initializeForRun(const std::string& cmd, bpo::options_description& cmdOptio
 {
   if (cmd == "run") {
     cmdOptionsDescriptions.add_options()("help,h", "show this help message and exit")(
+                                         "mode,m", bpo::value<std::string>()->default_value("single"), "choose mode between \"single\", \"mixed-full\", \"mixed-fast\"")(
                                          "nevents,n", bpo::value<int>()->default_value(5), "choose number of generated events")(
                                          "part-per-event,p", bpo::value<int>()->default_value(1), "choose number of primary particles events")(
                                          "single-g4,s", bpo::value<std::string>(), "run only GEANT4")("fast,f", "run GEANT4 with fast sim")(
                                          "in,i", bpo::value<std::string>(), "ROOT input file containing histograms for fast sim")(
                                          "out,o", bpo::value<std::string>()->default_value("./histograms.root"), "ROOT output file histograms should be written to")(
-                                         "export-geometry,e", bpo::value<std::string>()->default_value("./geometry.root"), "export geometry");
+                                         "export-geometry,e", bpo::value<std::string>()->default_value("./geometry.root"), "export geometry")(
+                                         "particle-energy,c", bpo::value<double>()->default_value(1.), "primary particle energy");
     cmdFunction = run;
   }
 }

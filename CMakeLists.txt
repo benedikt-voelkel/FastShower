@@ -84,6 +84,20 @@ find_package(VGM REQUIRED)
 # Include VGM headers
 include_directories(${VGM_INCLUDE_DIRS})
 
+##########
+# GEANT3 #
+##########
+
+find_package(Geant3 REQUIRED CONFIG)
+# Include GEANT3 headers
+include_directories(${Geant3_INCLUDE_DIRS})
+
+###########
+# pythia6 #
+###########
+
+find_package(pythia6 REQUIRED)
+
 ##############
 # GEANT4_VMC #
 ##############
@@ -145,7 +159,8 @@ set(SRCS
    ${CXX_SOURCE_DIR}/FastShowerPrimaryGenerator.cxx
 )
 set(HEADERS
-   #${CXX_INCLUDE_DIR}/FastShower.h
+   ${CXX_INCLUDE_DIR}/FastShower.h
+   ${CXX_INCLUDE_DIR}/FastShowerUtilities.h
    ${CXX_INCLUDE_DIR}/FastShowerCalorHit.h
    ${CXX_INCLUDE_DIR}/FastShowerCalorimeterSD.h
    ${CXX_INCLUDE_DIR}/FastShowerDetectorConstruction.h
@@ -194,7 +209,7 @@ target_link_libraries(${LIBRARY_NAME} ${ROOT_LIBRARIES})
 #list(APPEND _configure_shared_library_paths ${INSTALL_LIBRARY_DIR})
 
 add_executable(runFastShower ${CXX_SOURCE_DIR}/runFastShower.cxx)
-target_link_libraries(runFastShower ${LIBRARY_NAME} ${Boost_LIBRARIES} ${Geant4VMC_LIBRARIES} ${Geant4_LIBRARIES} ${VMCFastSim_LIBRARIES} ${ROOT_LIBRARIES})
+target_link_libraries(runFastShower ${LIBRARY_NAME} ${Boost_LIBRARIES} ${Geant4VMC_LIBRARIES} ${Geant4_LIBRARIES} ${VMCFastSim_LIBRARIES} ${ROOT_LIBRARIES} ${Geant3_LIBRARIES} ${pythia6_LIBRARIES})
 
 ################################################################################
 # Configure the config and setup script

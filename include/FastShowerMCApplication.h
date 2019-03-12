@@ -20,6 +20,7 @@
 #include <vector>
 #include <unordered_map>
 #include <string>
+#include <functional>
 
 #include <initializer_list>
 
@@ -31,6 +32,7 @@
 #include <TGeoUniformMagField.h>
 #include <TMCVerbose.h>
 #include <TH1D.h>
+#include <TH2D.h>
 
 class FastShowerMCStack;
 class FastShowerPrimaryGenerator;
@@ -46,13 +48,14 @@ class FastShowerMCApplication : public TVirtualMCApplication
 {
   public:
     FastShowerMCApplication(const char* name,  const char *title,
-                      Bool_t isMulti = kFALSE, Bool_t splitSimulation = kFALSE);
+                      Bool_t isMulti = kFALSE, Bool_t splitSimulation = kFALSE, Bool_t hasFastSim = kFALSE);
     FastShowerMCApplication();
     virtual ~FastShowerMCApplication();
 
     // methods
     void InitMC(const char *setup);
     void InitMC(std::initializer_list<const char*> setupMacros);
+    void InitMC();
     void RunMC(Int_t nofEvents);
     void FinishRun();
     void ExportGeometry(const char* path) const;
@@ -89,47 +92,14 @@ class FastShowerMCApplication : public TVirtualMCApplication
     // method for tests
     void SetOldGeometry(Bool_t oldGeometry = kTRUE);
 
-    void WriteHistograms(const std::string& filename) const;
+    void WriteHistograms(const std::string& filename);
 
   private:
     // methods
     FastShowerMCApplication(const FastShowerMCApplication& origin);
     void RegisterStack() const;
 
-    template <typename T>
-    void insertIntoVector(std::vector<T>& v, int bin, T weight = T(1), T defaultValue = T(0))
-    {
-      if(bin < 0) {
-        std::cerr << "Bin must be > -1" << std::endl;
-        exit(1);
-      }
-      if(bin >= v.size()) {
-        v.resize(bin + 1, defaultValue);
-      }
-      v[bin] += weight;
-    }
 
-    template <typename T, typename H>
-    void vectorToHistogram(const std::vector<T> v, H& histo) const
-    {
-      for(int i = 0; i < v.size(); i++) {
-        histo.SetBinContent(i+1, v[i]);
-      }
-    }
-
-    template <typename K, typename V, typename H>
-    void mapToHistogram(const std::unordered_map<K,V> m, H& histo) const
-    {
-      histo.GetXaxis()->SetAlphanumeric();
-      histo.GetXaxis()->SetCanExtend(true);
-
-      for(auto& iter : m) {
-        int bin = histo.GetXaxis()->FindBin(std::to_string(iter.first).c_str());
-        histo.SetBinContent(bin, iter.second);
-      }
-      histo.LabelsOption(">", "X");
-      histo.LabelsDeflate("X");
-    }
 
     // data members
     Int_t                     fPrintModulo;     ///< The event modulus number to be printed
@@ -145,12 +115,15 @@ class FastShowerMCApplication : public TVirtualMCApplication
     Bool_t                    fIsMaster;        ///< If is on master thread
     Bool_t                    fIsMultiRun;      ///< Flag if having multiple engines
     Bool_t                    fSplitSimulation; ///< Split geometry given user criteria
+    Bool_t                    fHasFastSim;      ///< For now just a helper flag
     Int_t                     fG3Id;            ///< engine ID of Geant3
     Int_t                     fG4Id;            ///< engine ID of Geant4
+    Int_t                     fFastSimId;       ///< Id of registered fast sim
     std::vector<Int_t>        mNElectrons;      ///< Count number of electrons
     std::vector<Int_t>        mNPositrons;      ///< Count number of electrons
     std::vector<Int_t>        mNPhotons;      ///< Count number of electrons
     std::unordered_map<int, int> mStepsPerPdg;
+    std::unordered_map<int, int> mBoundaryParticlesPerPdg;
     // All steps
     TH1D mStepsX;
     TH1D mStepsY;
@@ -165,6 +138,28 @@ class FastShowerMCApplication : public TVirtualMCApplication
     TH1D mPMomElectronsX;
     TH1D mPMomElectronsY;
     TH1D mPMomElectronsZ;
+
+    /// engines vs volume
+    TH2D mEngineVsVolume;
+
+    /// Particles on boundary
+    Bool_t fLeft;
+    /// Store the proton energy when it leaves the calorimeter
+    Double_t fProtonEnergy;
+    Int_t fBoundaryParticles;
+    std::vector<int> mBoundaryParticlesVec;
+    TH1D fHistBoudaryX;
+    TH1D fHistBoudaryY;
+    TH1D fHistBoudaryZ;
+
+
+    /// Energy deposited in calorimeter
+    TH1D mHistDepEnergyLAr;
+
+    // Engine vs. volume
+    TH2D mHistDepEnergyLArProtonEnergy;
+
+
 
 
   ClassDef(FastShowerMCApplication,1)  //Interface to MonteCarlo application

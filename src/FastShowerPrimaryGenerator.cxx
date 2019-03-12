@@ -36,7 +36,8 @@ FastShowerPrimaryGenerator::FastShowerPrimaryGenerator(TVirtualMCStack* stack)
     fStack(stack),
     fIsRandom(false),
     fPrimaryType(kDefault),
-    fNofPrimaries(1)
+    fNofPrimaries(1),
+    fPrimaryParticleEnergy(1.)
 
 {
 /// Standard constructor
@@ -50,7 +51,8 @@ FastShowerPrimaryGenerator::FastShowerPrimaryGenerator(const FastShowerPrimaryGe
     fStack(stack),
     fIsRandom(origin.fIsRandom),
     fPrimaryType(origin.fPrimaryType),
-    fNofPrimaries(origin.fNofPrimaries)
+    fNofPrimaries(origin.fNofPrimaries),
+    fPrimaryParticleEnergy(origin.fPrimaryParticleEnergy)
 {
 /// Copy constructor (for clonig on worker thread in MT mode).
 /// \param origin    The source object (on master).
@@ -63,7 +65,8 @@ FastShowerPrimaryGenerator::FastShowerPrimaryGenerator()
     fStack(0),
     fIsRandom(false),
     fPrimaryType(kDefault),
-    fNofPrimaries(0)
+    fNofPrimaries(0),
+    fPrimaryParticleEnergy(1.)
 {
 /// Default constructor
 }
@@ -108,7 +111,7 @@ void FastShowerPrimaryGenerator::GeneratePrimary1(const TVector3& origin)
  Double_t tof = 0.;
 
  // Energy (in GeV)
- Double_t kinEnergy = 1.;
+ Double_t kinEnergy = fPrimaryParticleEnergy;
  Double_t mass = particle->Mass();
  //Double_t mass = 0.51099906*1e-03;
  Double_t e  = mass + kinEnergy;

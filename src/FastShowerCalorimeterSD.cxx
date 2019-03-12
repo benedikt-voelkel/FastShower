@@ -42,7 +42,8 @@ FastShowerCalorimeterSD::FastShowerCalorimeterSD(const char* name,
     fCalCollection(0),
     fAbsorberVolId(0),
     fGapVolId(0),
-    fVerboseLevel(1)
+    fVerboseLevel(1),
+    fTotEGap(0.)
 {
 /// Standard constructor.
 /// Create hits collection and an empty hit for each layer
@@ -65,7 +66,8 @@ FastShowerCalorimeterSD::FastShowerCalorimeterSD(const FastShowerCalorimeterSD& 
     fCalCollection(0),
     fAbsorberVolId(origin.fAbsorberVolId),
     fGapVolId(origin.fGapVolId),
-    fVerboseLevel(origin.fVerboseLevel)
+    fVerboseLevel(origin.fVerboseLevel),
+    fTotEGap(origin.fTotEGap)
 {
 /// Copy constructor (for clonig on worker thread in MT mode).
 /// Create hits collection and an empty hit for each layer
@@ -86,7 +88,8 @@ FastShowerCalorimeterSD::FastShowerCalorimeterSD()
     fCalCollection(0),
     fAbsorberVolId(0),
     fGapVolId(0),
-    fVerboseLevel(1)
+    fVerboseLevel(1),
+    fTotEGap(0.)
 {
 /// Default constructor
 }
@@ -198,6 +201,25 @@ void FastShowerCalorimeterSD::EndOfEvent()
 }
 
 //_____________________________________________________________________________
+void FastShowerCalorimeterSD::SetTotalEdepGap(Double_t sumGapHits)
+{
+  fTotEGap = sumGapHits;
+}
+
+//_____________________________________________________________________________
+Double_t FastShowerCalorimeterSD::GetTotalEdepGap() const
+{
+  if(fTotEGap > 0.) {
+    return fTotEGap;
+  }
+  Double_t totEGap=0.;
+  for (Int_t i=0; i<fCalCollection->GetEntriesFast(); i++) {
+    totEGap += GetHit(i)->GetEdepGap();
+  }
+  return totEGap;
+}
+
+//_____________________________________________________________________________
 void FastShowerCalorimeterSD::Print(Option_t* /*option*/) const
 {
 /// Print the hits collection.
@@ -225,6 +247,10 @@ void FastShowerCalorimeterSD::PrintTotal() const
     totLAbs += GetHit(i)->GetTrakAbs();
     totEGap += GetHit(i)->GetEdepGap();
     totLGap += GetHit(i)->GetTrakGap();
+  }
+
+  if(fTotEGap > 0.) {
+    totEGap = fTotEGap;
   }
 
   cout << "   Absorber: total energy (MeV): "

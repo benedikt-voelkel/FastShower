@@ -18,14 +18,16 @@
 #include "FastShowerMCApplication.h"
 #include "FastShowerMCStack.h"
 #include "FastShowerPrimaryGenerator.h"
+#include "FastShowerUtilities.h"
 
 #include <TMCManager.h>
 
 #include <TROOT.h>
 #include <TFile.h>
 #include <TH1D.h>
+#include <TF1.h>
 #include <TInterpreter.h>
-#include <TTimer.h>
+#include <TStopwatch.h>
 #include <TVirtualMC.h>
 #include <TRandom.h>
 #include <TPDGCode.h>
@@ -46,7 +48,7 @@ ClassImp(FastShowerMCApplication)
 
 //_____________________________________________________________________________
 FastShowerMCApplication::FastShowerMCApplication(const char *name, const char *title,
-                                     Bool_t isMulti, Bool_t splitSimulation)
+                                     Bool_t isMulti, Bool_t splitSimulation, Bool_t hasFastSim)
   : TVirtualMCApplication(name,title),
     fPrintModulo(1),
     fEventNo(0),
@@ -61,8 +63,10 @@ FastShowerMCApplication::FastShowerMCApplication(const char *name, const char *t
     fIsMaster(kTRUE),
     fIsMultiRun(isMulti),
     fSplitSimulation(splitSimulation),
+    fHasFastSim(hasFastSim),
     fG3Id(-1),
     fG4Id(-1),
+    fFastSimId(-1),
     mStepsX("histStepsX", "histStepsX", 100, -10., 10.),
     mStepsY("histStepsY", "histStepsY", 50, -6., 6.),
     mStepsZ("histStepsZ", "histStepsZ", 50, -6., 6.),
@@ -71,7 +75,16 @@ FastShowerMCApplication::FastShowerMCApplication(const char *name, const char *t
     mPVElectronsZ("histPVElectronsZ", "histPVElectronsZ", 50, -6., 6.),
     mPMomElectronsX("histMomElectronsX", "histMomElectronsX", 50, 0., 0.005),
     mPMomElectronsY("histMomElectronsY", "histMomElectronsY", 50, 0., 0.005),
-    mPMomElectronsZ("histMomElectronsZ", "histMomElectronsZ", 50, 0., 0.005)
+    mPMomElectronsZ("histMomElectronsZ", "histMomElectronsZ", 50, 0., 0.005),
+    mEngineVsVolume("histEngineVsVolume", "", 1, 0., 1., 1., 0., 1.),
+    fLeft(kFALSE),
+    fProtonEnergy(0.),
+    fBoundaryParticles(0),
+    fHistBoudaryX("histBoundaryX", "", 50, -10., 10.),
+    fHistBoudaryY("histBoundaryY", "", 50, -6., 6.),
+    fHistBoudaryZ("histBoundaryZ", "", 50, -6., 6.),
+    mHistDepEnergyLAr("histDepEnergyLAr", "", 60, 0., 0.02),
+    mHistDepEnergyLArProtonEnergy("histDepEnergyLArProtonEnergy", "", 60, 0., 0.02, 60, 1., 2.)
 {
 /// Standard constructor
 /// \param name   The MC application name
@@ -100,6 +113,10 @@ FastShowerMCApplication::FastShowerMCApplication(const char *name, const char *t
   if(isMulti) {
     RequestMCManager();
     fMCManager->SetUserStack(fStack);
+    mEngineVsVolume.GetXaxis()->SetCanExtend(true);
+    mEngineVsVolume.GetXaxis()->SetAlphanumeric();
+    mEngineVsVolume.GetYaxis()->SetCanExtend(true);
+    mEngineVsVolume.GetYaxis()->SetAlphanumeric();
   }
 }
 
@@ -118,8 +135,10 @@ FastShowerMCApplication::FastShowerMCApplication(const FastShowerMCApplication& 
     fIsMaster(kFALSE),
     fIsMultiRun(origin.fIsMultiRun),
     fSplitSimulation(origin.fSplitSimulation),
+    fHasFastSim(origin.fHasFastSim),
     fG3Id(origin.fG3Id),
-    fG4Id(origin.fG4Id)
+    fG4Id(origin.fG4Id),
+    fFastSimId(origin.fFastSimId)
 {
 /// Copy constructor for cloning application on workers (in multithreading mode)
 /// \param origin   The source MC application
@@ -160,8 +179,10 @@ FastShowerMCApplication::FastShowerMCApplication()
     fIsMaster(kTRUE),
     fIsMultiRun(kFALSE),
     fSplitSimulation(kFALSE),
+    fHasFastSim(kFALSE),
     fG3Id(-1),
-    fG4Id(-1)
+    fG4Id(-1),
+    fFastSimId(-1)
 {
 /// Default constructor
 }
@@ -199,6 +220,7 @@ void FastShowerMCApplication::RegisterStack() const
 //
 // public methods
 //
+
 
 //_____________________________________________________________________________
 void FastShowerMCApplication::InitMC(const char* setup)
@@ -265,12 +287,56 @@ void FastShowerMCApplication::InitMC(std::initializer_list<const char*> setupMac
   //RegisterStack();
 
   Info("InitMC", "Multi run initialised");
-  fG3Id = fMCManager->GetEngineId("TGeant3TGeo");
-  fG4Id = fMCManager->GetEngineId("TGeant4");
-  std::cout << "Engine IDs\n"
-            << "TGeant3TGeo: " << fG3Id << "\n"
-            << "TGeant4: " << fG4Id << std::endl;
+  if(fHasFastSim) {
+    fFastSimId = fMCManager->GetEngineId("FastShower");
+  } else {
+    fG3Id = fMCManager->GetEngineId("TGeant3TGeo");
+    fG4Id = fMCManager->GetEngineId("TGeant4");
+    std::cout << "Engine IDs\n"
+              << "TGeant3TGeo: " << fG3Id << "\n"
+              << "TGeant4: " << fG4Id << std::endl;
+  }
 }
+
+//_____________________________________________________________________________
+void FastShowerMCApplication::InitMC()
+{
+/// Initialize MC.
+/// The selection of the concrete MC is done in the macro.
+/// \param setup The name of the configuration macro
+
+  fVerbose.InitMC();
+
+
+
+  if(fIsMultiRun) {
+    fMCManager->Init([this](TVirtualMC* mc){
+                                        mc->SetRootGeometry();
+                                        mc->SetMagField(this->fMagField);
+                                        mc->Init();
+                                        mc->BuildPhysics();
+                                      });
+    //RegisterStack();
+
+    Info("InitMC", "Multi run initialised");
+    if(fHasFastSim) {
+      fFastSimId = fMCManager->GetEngineId("FastShower");
+    } else {
+      fG3Id = fMCManager->GetEngineId("TGeant3TGeo");
+      fG4Id = fMCManager->GetEngineId("TGeant4");
+      std::cout << "Engine IDs\n"
+                << "TGeant3TGeo: " << fG3Id << "\n"
+                << "TGeant4: " << fG4Id << std::endl;
+    }
+  } else {
+    fMC->SetStack(fStack);
+    fMC->SetRootGeometry();
+    fMC->SetMagField(fMagField);
+    fMC->Init();
+    fMC->BuildPhysics();
+  }
+}
+
 
 //_____________________________________________________________________________
 void FastShowerMCApplication::RunMC(Int_t nofEvents)
@@ -281,7 +347,7 @@ void FastShowerMCApplication::RunMC(Int_t nofEvents)
   fVerbose.RunMC(nofEvents);
 
   // Prepare a timer
-  TTimer timer;
+  TStopwatch timer;
 
   if(!fIsMultiRun) {
     Info("RunMC", "Start single run");
@@ -303,9 +369,12 @@ void FastShowerMCApplication::RunMC(Int_t nofEvents)
     timer.Start();
     fMCManager->Run(nofEvents);
   }
-  timer.Stop();
   Info("RunMC", "Transport finished.");
-  timer.Print();
+  timer.Stop();
+  Double_t realTime = timer.RealTime();
+  Double_t cpuTime = timer.CpuTime();
+  std::cout << "Real time: " << realTime << " s\n"
+            << "CPU time:  " << cpuTime << " s" << std::endl;
   FinishRun();
 }
 
@@ -473,6 +542,8 @@ void FastShowerMCApplication::BeginEvent()
 
   fVerbose.BeginEvent();
 
+  fBoundaryParticles = 0;
+
   // Clear TGeo tracks (if filled)
   if (   !fIsMultiRun &&
          TString(fMC->GetName()) == "TGeant3TGeo" &&
@@ -515,6 +586,8 @@ void FastShowerMCApplication::PreTrack()
 /// the decay products of the primary track (K0Short)
 /// are printed on the screen.
 
+  fLeft = kFALSE;
+
   fVerbose.PreTrack();
 
   TParticle* particle = fStack->GetCurrentTrack();
@@ -551,27 +624,49 @@ void FastShowerMCApplication::PreTrack()
 void FastShowerMCApplication::Stepping()
 {
 /// User actions at each step
-
-  // Work around for Fluka VMC, which does not call
-  // MCApplication::PreTrack()
-  //
-  //cout << "FastShowerMCApplication::Stepping" << this << endl;
-  static Int_t trackId = 0;
-  if ( TString(fMC->GetName()) == "TFluka" &&
-       fMC->GetStack()->GetCurrentTrackNumber() != trackId ) {
-    fVerbose.PreTrack();
-    trackId = fMC->GetStack()->GetCurrentTrackNumber();
+  TParticle* particle = fStack->GetCurrentTrack();
+  if(strcmp(fMC->CurrentVolName(), "WRLD") == 0 && particle->GetPdgCode() != 2212) {
+    fMC->StopTrack();
+    return;
   }
 
-  fVerbose.Stepping();
-
-  fCalorimeterSD->ProcessHits();
+  if(fMC->IsTrackExiting() && strcmp(fMC->CurrentVolName(), "WRLD") != 0)
+  {
+    fLeft = kTRUE;
+  }
 
   TLorentzVector pos;
   TLorentzVector mom;
 
   fMC->TrackPosition(pos);
   fMC->TrackMomentum(mom);
+
+  if(fLeft && fMC->IsTrackEntering() && strcmp(fMC->CurrentVolName(), "WRLD") == 0)
+  {
+    fBoundaryParticles++;
+    Double_t px, py, pz;
+    fMC->TrackMomentum(px, py, pz, fProtonEnergy);
+    fHistBoudaryX.Fill(pos.X());
+    fHistBoudaryY.Fill(pos.Y());
+    fHistBoudaryZ.Fill(pos.Z());
+    utilities::addToMap(mBoundaryParticlesPerPdg, fMC->TrackPid(), 1, 1);
+    fLeft = kFALSE;
+  }
+
+  // Work around for Fluka VMC, which does not call
+  // MCApplication::PreTrack()
+  //
+  //cout << "FastShowerMCApplication::Stepping" << this << endl;
+  /*static Int_t trackId = 0;
+  if ( TString(fMC->GetName()) == "TFluka" &&
+       fMC->GetStack()->GetCurrentTrackNumber() != trackId ) {
+    fVerbose.PreTrack();
+    trackId = fMC->GetStack()->GetCurrentTrackNumber();
+  }*/
+
+  fVerbose.Stepping();
+
+  fCalorimeterSD->ProcessHits();
 
 
   if(fVerbose.GetLevel() > 0) {
@@ -591,32 +686,39 @@ void FastShowerMCApplication::Stepping()
   }
 
   // Count pdg steps
-  int pdg = fMC->TrackPid();
-  if(mStepsPerPdg.find(pdg) == mStepsPerPdg.end()) {
-    mStepsPerPdg[pdg] = 0;
-  }
-  mStepsPerPdg[pdg]++;
+  utilities::addToMap(mStepsPerPdg, fMC->TrackPid(), 1, 1);
 
   mStepsX.Fill(pos.X());
   mStepsY.Fill(pos.Y());
   mStepsZ.Fill(pos.Z());
 
+  if(fIsMultiRun && strcmp(fMC->CurrentVolName(), "ABSO") == 0 || strcmp(fMC->CurrentVolName(), "GAPX") == 0) {
+    mEngineVsVolume.Fill(fMC->CurrentVolName(), fMC->GetName(), 1.);
+  }
+
   // Now transfer track
   if(fSplitSimulation) {
-    Int_t targetId = -1;
-    if(fMC->GetId() == 0 && strcmp(fMC->CurrentVolName(), "ABSO") == 0)
-    {
-      targetId = 1;
+
+    if(fHasFastSim && (strcmp(fMC->CurrentVolName(), "ABSO") == 0 || strcmp(fMC->CurrentVolName(), "GAPX") == 0)) {
+      fMCManager->TransferTrack(fFastSimId);
     }
-    else if(fMC->GetId() == 1 && strcmp(fMC->CurrentVolName(), "GAPX") == 0)
-    {
-      targetId = 0;
-    }
-    if(targetId > -1) {
-      if(fVerbose.GetLevel() > 0) {
-        Info("Stepping", "Transfer track");
+
+    else {
+      Int_t targetId = -1;
+      if(fMC->GetId() == 0 && strcmp(fMC->CurrentVolName(), "ABSO") == 0)
+      {
+        targetId = 1;
       }
-      fMCManager->TransferTrack(targetId);
+      else if(fMC->GetId() == 1 && strcmp(fMC->CurrentVolName(), "GAPX") == 0)
+      {
+        targetId = 0;
+      }
+      if(targetId > -1) {
+        if(fVerbose.GetLevel() > 0) {
+          Info("Stepping", "Transfer track %i",fStack->GetCurrentTrackNumber());
+        }
+        fMCManager->TransferTrack(targetId);
+      }
     }
   }
 }
@@ -667,39 +769,49 @@ void FastShowerMCApplication::FinishEvent()
     }
   }
 
+  // Monitor energy deposition
+  mHistDepEnergyLAr.Fill(fCalorimeterSD->GetTotalEdepGap());
+  mHistDepEnergyLArProtonEnergy.Fill(fCalorimeterSD->GetTotalEdepGap(), fProtonEnergy);
 
   if (fEventNo % fPrintModulo == 0)
     fCalorimeterSD->PrintTotal();
 
   fCalorimeterSD->EndOfEvent();
 
-  insertIntoVector(mNElectrons, fStack->GetNumberOfParticles(11));
-  insertIntoVector(mNPositrons, fStack->GetNumberOfParticles(-11));
-  insertIntoVector(mNPhotons, fStack->GetNumberOfParticles(22));
+  utilities::insertIntoVector(mNElectrons, fStack->GetNumberOfParticles(11));
+  utilities::insertIntoVector(mNPositrons, fStack->GetNumberOfParticles(-11));
+  utilities::insertIntoVector(mNPhotons, fStack->GetNumberOfParticles(22));
+
+  utilities::insertIntoVector(mBoundaryParticlesVec, fBoundaryParticles);
 
   fStack->Reset();
 }
 
-void FastShowerMCApplication::WriteHistograms(const std::string& fileName) const
+void FastShowerMCApplication::WriteHistograms(const std::string& fileName)
 {
   TFile file(fileName.c_str(), "RECREATE");
-  TH1D histNElectrons("histNElectrons", "histNElectrons", mNElectrons.size(), 0., mNElectrons.size() + 1);
-  vectorToHistogram(mNElectrons, histNElectrons);
-  TH1D histNPositrons("histNPositrons", "histNPositrons", mNPositrons.size(), 0., mNPositrons.size() + 1);
-  vectorToHistogram(mNPositrons, histNPositrons);
-  TH1D histNPhotons("histNPhotons", "histNPhotons", mNPhotons.size(), 0., mNPhotons.size() + 1);
-  vectorToHistogram(mNPhotons, histNPhotons);
-  TH1D histStepsPerPDG("histStepsPerPDG", "histStepsPerPDG", 1, 0., 1.);
-  std::unordered_map<int, int> stepsPerPDGTmp;
+  TH1D histNBoundaryParticles("histNBoundaryParticles", "", mBoundaryParticlesVec.size(), -0.5, mBoundaryParticlesVec.size() - 0.5);
+  utilities::vectorToHistogram(mBoundaryParticlesVec, histNBoundaryParticles, [](Int_t bin) {return static_cast<int>(bin);});
+  TH1D histNElectrons("histNElectrons", "", mNElectrons.size(), -0.5, mNElectrons.size() - 0.5);
+  utilities::vectorToHistogram(mNElectrons, histNElectrons, [](Int_t bin) {return static_cast<int>(bin);});
+  TH1D histNPositrons("histNPositrons", "", mNPositrons.size(), -0.5, mNPositrons.size() - 0.5);
+  utilities::vectorToHistogram(mNPositrons, histNPositrons, [](Int_t bin) {return static_cast<int>(bin);});
+  TH1D histNPhotons("histNPhotons", "", mNPhotons.size(), -0.5, mNPhotons.size() - 0.5);
+  utilities::vectorToHistogram(mNPhotons, histNPhotons, [](Int_t bin) {return static_cast<int>(bin);});
 
-  // Do not store crazy things
+  // Do not store "crazy" things
+  std::unordered_map<int, int> stepsPerPDGTmp;
   for(auto& iter : mStepsPerPdg) {
     if(std::abs(iter.first) <= 3000) {
       stepsPerPDGTmp[iter.first] = iter.second;
     }
   }
+  TH1D histStepsPerPDG("histStepsPerPDG", "", 1, 0., 1.);
+  utilities::mapToHistogram(stepsPerPDGTmp, histStepsPerPDG, [](Int_t bin) {return static_cast<int>(bin);});
 
-  mapToHistogram(stepsPerPDGTmp, histStepsPerPDG);
+  TH1D histBoundaryParticlesPerPdg("histBoundaryParticlesPerPdg", "", 1, 0., 1.);
+  utilities::mapToHistogram(mBoundaryParticlesPerPdg, histBoundaryParticlesPerPdg, [](Int_t bin) {return static_cast<int>(bin);});
+
   file.WriteTObject(&mStepsX);
   file.WriteTObject(&mStepsY);
   file.WriteTObject(&mStepsZ);
@@ -711,6 +823,24 @@ void FastShowerMCApplication::WriteHistograms(const std::string& fileName) const
   file.WriteTObject(&mPMomElectronsX);
   file.WriteTObject(&mPMomElectronsY);
   file.WriteTObject(&mPMomElectronsZ);
+
+  file.WriteTObject(&mEngineVsVolume);
+
+  file.WriteTObject(&fHistBoudaryX);
+  file.WriteTObject(&fHistBoudaryY);
+  file.WriteTObject(&fHistBoudaryZ);
+
+  file.WriteTObject(&mHistDepEnergyLAr);
+
+  file.WriteTObject(&mHistDepEnergyLArProtonEnergy);
+
+
+  TF1 fit("energyDepositFit", "gaus", 0., 0.02);
+  mHistDepEnergyLAr.Fit(&fit);
+  Double_t fitParams[3];
+  fit.GetParameters(&fitParams[0]);
+  Info("WriteHistograms", "Fit parameters are N = %f, x0 = %f and s = %f", fitParams[0], fitParams[1], fitParams[2]);
+  file.WriteTObject(&fit);
 
   file.Write();
   file.Close();

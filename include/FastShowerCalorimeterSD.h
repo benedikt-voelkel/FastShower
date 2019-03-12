@@ -46,6 +46,8 @@ class FastShowerCalorimeterSD : public TNamed
     void    Initialize();
     Bool_t  ProcessHits();
     void    EndOfEvent();
+    void    SetTotalEdepGap(Double_t sumGapHits);
+    Double_t GetTotalEdepGap() const;
     virtual void  Print(Option_t* option = "") const;
     void    PrintTotal() const;
 
@@ -67,6 +69,7 @@ class FastShowerCalorimeterSD : public TNamed
     Int_t          fAbsorberVolId; ///< The absorber volume Id
     Int_t          fGapVolId;      ///< The gap volume Id
     Int_t          fVerboseLevel;  ///< Verbosity level
+    Double_t       fTotEGap; ///< Total energy deposited in gap
 
   ClassDef(FastShowerCalorimeterSD,1) //FastShowerCalorimeterSD
 
