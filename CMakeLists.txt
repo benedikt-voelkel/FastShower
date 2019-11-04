@@ -62,10 +62,18 @@ message(STATUS "Boost libraries ${Boost_LIBRARIES}")
 
 # NOTE Rely on $ENV{ROOTSYS} at the moment
 list(APPEND CMAKE_PREFIX_PATH $ENV{ROOTSYS})
-find_package(ROOT REQUIRED COMPONENTS Core RIO MathCore VMC EG)
+find_package(ROOT REQUIRED COMPONENTS Core RIO MathCore EG)
 include(${ROOT_USE_FILE})
 # Include ROOT headers
 include_directories(${ROOT_INCLUDE_DIRS})
+
+#######
+# VMC #
+#######
+
+# NOTE Rely on $ENV{ROOTSYS} at the moment
+find_package(VMC REQUIRED)
+include_directories(${VMC_INCLUDE_DIRS})
 
 ##########
 # GEANT4 #
@@ -120,29 +128,30 @@ include_directories(${VMCFastSim_INCLUDE_DIRS})
 ################################################################################
 
 # NOTE So far only based on ROOT
-message(STATUS "Derive CXX standard from ROOT installation")
+#message(STATUS "Derive CXX standard from ROOT installation")
 SET(CMAKE_CXX_STANDARD 11)
-execute_process(
-    COMMAND $ENV{ROOTSYS}/bin/root-config --cflags
-    OUTPUT_VARIABLE ROOT_C_FLAGS
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
+#execute_process(
+#    COMMAND $ENV{ROOTSYS}/bin/root-config --cflags
+#    OUTPUT_VARIABLE ROOT_C_FLAGS
+#    OUTPUT_STRIP_TRAILING_WHITESPACE)
 # Find the cxx standard
-string(FIND ${ROOT_C_FLAGS} "-std=" POSITION)
-if (${POSITION} GREATER -1)
-  string(SUBSTRING ${ROOT_C_FLAGS} ${POSITION} 11 ROOT_CXX_STD)
-  if(${ROOT_CXX_STD} STREQUAL "-std=c++1z " OR ${ROOT_CXX_STD} STREQUAL "-std=c++17 ")
-    SET(CMAKE_CXX_STANDARD 17)
-  elseif(${ROOT_CXX_STD} STREQUAL "-std=c++1y " OR ${ROOT_CXX_STD} STREQUAL "-std=c++14 ")
-    SET(CMAKE_CXX_STANDARD 14)
-  endif()
-endif()
-message(STATUS "Compile with ${CMAKE_CXX_STANDARD}")
+#string(FIND ${ROOT_C_FLAGS} "-std=" POSITION)
+#if (${POSITION} GREATER -1)
+#  string(SUBSTRING ${ROOT_C_FLAGS} ${POSITION} 11 ROOT_CXX_STD)
+#  if(${ROOT_CXX_STD} STREQUAL "-std=c++1z " OR ${ROOT_CXX_STD} STREQUAL "-std=c++17 ")
+#    SET(CMAKE_CXX_STANDARD 17)
+#  elseif(${ROOT_CXX_STD} STREQUAL "-std=c++1y " OR ${ROOT_CXX_STD} STREQUAL "-std=c++14 ")
+#    SET(CMAKE_CXX_STANDARD 14)
+#  endif()
+#endif()
+#message(STATUS "Compile with ${CMAKE_CXX_STANDARD}")
 
 
 ################################################################################
 # Compiler and linker flags
 ################################################################################
-set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -O2 -g")
+#set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -O2 -g")
+set(CMAKE_CXX_FLAGS  "-O2")
 
 
 ################################################################################
@@ -205,7 +214,7 @@ SET(ROOT_DICT_LIB_FILES
 include_directories(${CXX_INCLUDE_DIR})
 set(LIBRARY_NAME ${MODULE_NAME})
 add_library(${LIBRARY_NAME} SHARED ${SRCS} "${ROOT_DICT_NAME}.cxx")
-target_link_libraries(${LIBRARY_NAME} ${ROOT_LIBRARIES})
+target_link_libraries(${LIBRARY_NAME} ${ROOT_LIBRARIES} ${VMC_LIBRARIES})
 #list(APPEND _configure_shared_library_paths ${INSTALL_LIBRARY_DIR})
 
 add_executable(runFastShower ${CXX_SOURCE_DIR}/runFastShower.cxx)
